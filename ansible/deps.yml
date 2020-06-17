@@ -1,0 +1,51 @@
+---
+- name: boot registry
+  become: yes
+  become_method: sudo
+  hosts: all
+  tasks:
+    - name: install os packages
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - python3
+        - python3-pip
+        - "certbot={{ certbot_version }}"
+
+    - pip:
+        name: docker
+
+    - service:
+        name: docker
+        state: started
+
+    - name: "check previous certificates for {{ domain }}"
+      stat:
+        path: "/etc/letsencrypt/live/{{ domain }}"
+      register: cert_dir
+
+    - name: "get certificates for {{ domain }}"
+      command: "certbot certonly -n --standalone -d {{ domain }}  --agree-tos -m {{ email }}"
+      when: not cert_dir.stat.exists
+    - file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - "/etc/{{ domain }}/"
+        - "/etc/{{ domain }}/certs"
+        - "/var/{{ domain }}/registry"
+        
+    - name: "check previous tls certificates for registry"
+      stat:
+        path: "/etc/{{ domain }}/certs/registry.crt"
+      register: registry_cert
+    - name: "get tls certificates for registry"
+      command: "openssl req \
+        -newkey rsa:4096 \
+        -nodes -sha256 \
+        -keyout /etc/{{ domain }}/certs/registry.key \
+        -x509 -days 365 \
+        -out /etc/{{ domain }}/certs/registry.crt \
+        -subj '{{ registry_subj }}'"
+      when: not registry_cert.stat.exists

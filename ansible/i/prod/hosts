@@ -1,0 +1,2 @@
+[web]
+registry.dyslav.it ansible_connection=ssh ansible_user=runner

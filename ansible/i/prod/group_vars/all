@@ -1,0 +1,16 @@
+---
+
+certbot_version: 0.40.0-1
+domain: registry.dyslav.it
+email: vl@dyslav.it
+
+nginx_version: 1.19.0-alpine
+registry_version: 2.7.1
+
+network_registry: network_registry
+network_auth: network_auth
+
+registry_subj: /C=IT/ST=Milan/L=Milan/O=ACME/OU=IT/CN=registry
+auth_subj: /C=IT/ST=Milan/L=Milan/O=ACME/OU=IT/CN=auth
+
+registry_http_secret: averysecuresecret

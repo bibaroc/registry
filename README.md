@@ -1,0 +1,1 @@
+Tested on google cloud n1-standard-2 (2 vCPU, 7.5 GB) on Ununtu 20.04 LTS Minimal
