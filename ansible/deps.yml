@@ -1,10 +1,10 @@
 ---
-- name: boot registry
+- name: registry dependencies
   become: yes
   become_method: sudo
   hosts: all
   tasks:
-    - name: install os packages
+    - name: os packages
       package:
         name: "{{ item }}"
         state: present
@@ -13,39 +13,56 @@
         - python3-pip
         - "certbot={{ certbot_version }}"
 
-    - pip:
+    - name: ansible packages
+      pip:
         name: docker
 
-    - service:
+    - name: docker service
+      service:
         name: docker
         state: started
 
-    - name: "check previous certificates for {{ domain }}"
-      stat:
-        path: "/etc/letsencrypt/live/{{ domain }}"
-      register: cert_dir
-
-    - name: "get certificates for {{ domain }}"
-      command: "certbot certonly -n --standalone -d {{ domain }}  --agree-tos -m {{ email }}"
-      when: not cert_dir.stat.exists
-    - file:
+    - name: "directory structure"
+      file:
         path: "{{ item }}"
         state: directory
       loop:
         - "/etc/{{ domain }}/"
         - "/etc/{{ domain }}/certs"
         - "/var/{{ domain }}/registry"
+
+    - name: "web certificates for {{ domain }}"
+      block:
+        - stat:
+            path: "/etc/letsencrypt/live/{{ domain }}"
+          register: web_certs
+        - command: "certbot certonly -n --standalone -d {{ domain }}  --agree-tos -m {{ email }}"
+          when: not web_certs.stat.exists
         
-    - name: "check previous tls certificates for registry"
-      stat:
-        path: "/etc/{{ domain }}/certs/registry.crt"
-      register: registry_cert
-    - name: "get tls certificates for registry"
-      command: "openssl req \
-        -newkey rsa:4096 \
-        -nodes -sha256 \
-        -keyout /etc/{{ domain }}/certs/registry.key \
-        -x509 -days 365 \
-        -out /etc/{{ domain }}/certs/registry.crt \
-        -subj '{{ registry_subj }}'"
-      when: not registry_cert.stat.exists
+    - name: "tls certificates for registry"
+      block:
+        - stat:
+            path: "/etc/{{ domain }}/certs/registry.crt"
+          register: registry_cert
+        - command: "openssl req \
+            -newkey rsa:4096 \
+            -nodes -sha256 \
+            -keyout /etc/{{ domain }}/certs/registry.key \
+            -x509 -days 365 \
+            -out /etc/{{ domain }}/certs/registry.crt \
+            -subj '{{ registry_subj }}'"
+          when: not registry_cert.stat.exists
+
+    - name: "tls certificates for auth service"
+      block:
+        - stat:
+            path: "/etc/{{ domain }}/certs/auth.crt"
+          register: auth_certs
+        - command: "openssl req \
+            -newkey rsa:4096 \
+            -nodes -sha256 \
+            -keyout /etc/{{ domain }}/certs/auth.key \
+            -x509 -days 365 \
+            -out /etc/{{ domain }}/certs/auth.crt \
+            -subj '{{ auth_subj }}'"
+          when: not auth_certs.stat.exists

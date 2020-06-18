@@ -1,0 +1,82 @@
+---
+- name: docker registry
+  become: yes
+  become_method: sudo
+  hosts: all
+  tasks:
+
+    - name: docker networks
+      docker_network:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - "{{ network_registry }}"
+        - "{{ network_auth }}"
+
+    - name: nginx proxy
+      block:
+        - template:
+            src: nginx.conf.j2
+            dest: "/etc/{{ domain }}/nginx.conf"
+          register: nginx_conf
+        - docker_container:
+            name: nginx
+            image: "nginx:{{ nginx_version }}"
+            state: started
+            restart_policy: unless-stopped
+            restart: "{{ nginx_conf.changed }}"
+            ports:
+             - "443:443"
+            networks:
+              - name: "{{ network_registry }}"
+              - name: "{{ network_auth }}"
+            networks_cli_compatible: no
+            purge_networks: yes
+            volumes:
+              - /etc/letsencrypt:/etc/letsencrypt:ro
+              - "/etc/{{ domain }}/nginx.conf:/etc/nginx/nginx.conf:ro"
+
+    - name: docker registry
+      docker_container:
+        name: registry
+        image: "registry:{{ registry_version }}"
+        state: started
+        restart_policy: unless-stopped
+        networks:
+          - name: "{{ network_registry }}"
+        networks_cli_compatible: no
+        purge_networks: yes
+        volumes:
+          - "/etc/{{ domain }}/certs/:/certs:ro"
+          - "/var/{{ domain }}/registry:/var/lib/registry"
+        env:
+          REGISTRY_HTTP_TLS_CERTIFICATE: /certs/registry.crt
+          REGISTRY_HTTP_TLS_KEY: /certs/registry.key
+          REGISTRY_HTTP_SECRET: "{{ registry_http_secret }}"
+    
+    - name: copy auth service binary
+      block:
+        - copy:
+            src: ../bin/auth
+            dest: "/var/{{ domain }}/auth"
+            mode: +x
+          register: auth
+        - docker_container:
+            name: auth
+            image: "alpine:{{ alpine_version }}"
+            state: started
+            restart: "{{ auth.changed }}"
+            restart_policy: unless-stopped
+            networks:
+              - name: "{{ network_auth }}"
+            networks_cli_compatible: no
+            purge_networks: yes
+            volumes:
+              - "/etc/{{ domain }}/certs/:/certs:ro"
+              - "/var/{{ domain }}/auth:/bin/auth"
+            env:
+              AUTH_ADDR: ":443"
+              AUTH_TLS_CRT: /certs/auth.crt
+              AUTH_TLS_KEY: /certs/auth.key
+              AUTH_REALM: "Docker login"
+            command: auth
